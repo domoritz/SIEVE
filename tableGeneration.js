@@ -1,4 +1,5 @@
 var colnames = ['Site (HXB2)','Vaccine','Placebo','Combined'];
+var sortType = [1,1,1,1];
 
 var showEntropies = true;
 d3.select("#tableToggleText").on("click",toggleTableDisplay);
@@ -19,9 +20,8 @@ function generateEntropyTable(sites) {
   var table = d3.select(".table-zn")
       .append("table")
       .attr("id","entropyTable")
-      .style("width","100%")
-      .append("caption")
-        .text("Entropy Summary");
+      .style("width","100%");
+  table.append("caption").text("Entropy Summary");
       
   var thead = table.append("thead");
   var tbody = table.append("tbody");
@@ -33,13 +33,16 @@ function generateEntropyTable(sites) {
     .append("th")
       .attr("id", function (d,i) {return "entropyHeader" + i;})
       .style("cursor","pointer")
-      .on("click", function(k){
+      .on("click", function(k,i){
+        var currSortType = sortType[i];
+        sortType[i] *= -1;
         var rowsToSort = tbody.selectAll("tr.siteRow");
         rowsToSort.sort(function(a,b) {
-          return whichIsBigger(a[k],b[k]);
+          if (currSortType > 0) {return whichIsBigger(a[k],b[k]);}
+          else{ return -whichIsBigger(a[k],b[k]);}
         })
       })
-      .text(function(column) { return column; });
+      .text(function(column) { return column + " ↕"; });
   // create average and joint rows.
   // text in data cells is empty, because there is no selection during table generation
   var avgRow = tbody.append("tr").attr("class", "entropy averageRow groupStatRow");
@@ -70,8 +73,19 @@ function generateEntropyTable(sites) {
   tbody.append("tr").attr("class","entropyTempRow")
     .append("td")
       .attr("colspan","4")
-      .style("text-align","right")
+      .style("text-align","center")
       .text("Data will populate when a selection is made");
+      
+  // prepend click-to-delete area
+  table.selectAll("tr").insert("th",":first-child")
+    .on("click",function (d,i){
+      if (typeof d != 'undefined'){ removeOnClick(d,i); }
+    })
+    .text(function(d){
+      if (typeof d != 'undefined'){ return "X"; }
+      else{ return ""; }
+    });
+ 
 }
 
 
@@ -87,23 +101,20 @@ function updateEnropyTable(sites) {
     var rows = tbody.selectAll("tr.siteRow").data(entropyData, function(d) { return d[colnames[0]];});
     rows.enter()
       .append("tr")
-        /*.on("click", function(){
-          var popup = d3.select(".table-zn")
-            .append("div")
-              .attr("class", "popup")
-              .style("left", "8px")
-              .style("top", "8px");
-          popup.append("h2").text("Remove site").on("click",function(){
-            console.log("remove site has been clicked");
-          });
-          popup.append("h2").text("View in reference sequence").on("click",function(){
-            console.log("view in seq has been clicked");
-          });
-        })*/
         .attr("class","siteRow")
         .attr("id", function(d) {
           return "siteRow-" + d[colnames[0]];
-        });
+        })
+        .insert("th",":first-child")
+          .attr("class","deleteTableRowTrigger")
+          .style("cursor","pointer")
+          .on("click",function (d){
+            if (typeof d != 'undefined'){ removeOnClick(d); }
+          })
+          .text(function(d){
+            if (typeof d != 'undefined'){ return "X"; }
+            else{ return ""; }
+          });
     rows.exit().remove();
     var cells = rows.selectAll("td")
       .data(function(row){
@@ -116,6 +127,13 @@ function updateEnropyTable(sites) {
         .text(function(d){
           return d;
         });
+    // add on-click-zoom to each site row
+    tbody.selectAll(".siteRow").select("td")
+      .attr("class","siteRowSiteID")
+      .style("cursor","pointer")
+      .on("click", function(d){
+        onClickChangeView(d);
+    });
     // and replace average/joint row filler with actual values
     var avgEntropyData = calculateAverageEntropyData(entropyData);
     d3.select(".entropy#vaccineAverage").text(avgEntropyData[0]);
@@ -133,19 +151,9 @@ function updateEnropyTable(sites) {
     });
     
   } else {
-    // selection is empty.
-    // remove all site rows
-    tbody.selectAll("tr.siteRow").transition().remove();
-    // add the placeholder row
-    tbody.append("tr")
-      .attr("class","entropyTempRow")
-      .append("td")
-        .attr("colspan","4")
-        .style("text-align","right")
-        .text("Data will populate when a selection is made");
-    // remove content from average and joint rows
-    tbody.selectAll(".groupStatRow").selectAll("td:not(.rowHeader)")
-      .text("-");
+    // new strategy for zero-length site selection
+    d3.select(".table-zn").html("");
+    generateTable(sites);
   }
 }
 
@@ -180,9 +188,8 @@ function generateDistanceTable(sites) {
   var table = d3.select(".table-zn")
       .append("table")
       .attr("id","distanceTable")
-      .style("width","100%")
-      .append("caption")
-        .text("Distance Summary");
+      .style("width","100%");
+  table.append("caption").text("Distance Summary");
       
   var thead = table.append("thead");
   var tbody = table.append("tbody");
@@ -194,13 +201,16 @@ function generateDistanceTable(sites) {
     .append("th")
       .attr("id", function (d,i) {return "distanceHeader" + i;})
       .style("cursor","pointer")
-      .on("click", function(k){
+      .on("click", function(k,i){
+        var currSortType = sortType[i];
+        sortType[i] *= -1;
         var rowsToSort = tbody.selectAll("tr.siteRow");
         rowsToSort.sort(function(a,b) {
-          return whichIsBigger(a[k],b[k]);
+          if (currSortType > 0) {return whichIsBigger(a[k],b[k]);}
+          else{ return -whichIsBigger(a[k],b[k]);}
         })
       })
-      .text(function(column) { return column; });
+      .text(function(column) { return column + " ↕"; });
   // create average and joint rows
   // text in data cells is empty, because there is no selection during table generation
   var avgRow = tbody.append("tr").attr("class", "distance averageRow groupStatRow");
@@ -220,8 +230,19 @@ function generateDistanceTable(sites) {
   tbody.append("tr").attr("class","distanceTempRow")
     .append("td")
       .attr("colspan","4")
-      .style("text-align","right")
+      .style("text-align","center")
       .text("Data will populate when a selection is made");
+      
+  // prepend click-to-delete area
+  table.selectAll("tr").insert("th",":first-child")
+    .on("click",function (d,i){
+      if (typeof d != 'undefined'){ removeOnClick(d,i); }
+    })
+    .text(function(d){
+      if (typeof d != 'undefined'){ return "X"; }
+      else{ return ""; }
+    });
+ 
 }
 
 function updateDistanceTable(sites) {
@@ -239,7 +260,17 @@ function updateDistanceTable(sites) {
         .attr("class","siteRow")
         .attr("id", function(d) {
           return "siteRow-" + d[colnames[0]];
-        });
+        })
+        .insert("th",":first-child")
+          .attr("class","deleteTableRowTrigger")
+          .style("cursor","pointer")
+          .on("click",function (d){
+            if (typeof d != 'undefined'){ removeOnClick(d); }
+          })
+          .text(function(d){
+            if (typeof d != 'undefined'){ return "X"; }
+            else{ return ""; }
+          });
     rows.exit().remove();
     var cells = rows.selectAll("td")
       .data(function(row){
@@ -252,31 +283,28 @@ function updateDistanceTable(sites) {
         .text(function(d){
           return d;
         });
+    // add on-click-zoom to each site row
+    tbody.selectAll(".siteRow").select("td")
+      .attr("class","siteRowSiteID")
+      .style("cursor","pointer")
+      .on("click", function(d){
+        onClickChangeView(d);
+      });
     // and replace average row filler with actual values
     var avgDistanceData = calculateAverageDistanceData(distanceData);
     d3.select(".distance#vaccineAverage").text(avgDistanceData[0]);
     d3.select(".distance#placeboAverage").text(avgDistanceData[1]);
     d3.select(".distance#combinedAverage").text(avgDistanceData[2]);
-    
+       
     // sort rows by site
     tbody.selectAll("tr.siteRow").sort(function(a,b) {
       return whichIsBigger(a[colnames[0]],b[colnames[0]])
     });
     
   } else {
-    // selection is empty.
-    // remove all site rows
-    tbody.selectAll("tr.siteRow").transition().remove();
-    // add the placeholder row
-    tbody.append("tr")
-      .attr("class","distanceTempRow")
-      .append("td")
-        .attr("colspan","4")
-        .style("text-align","right")
-        .text("Data will populate when a selection is made");
-    // remove content from average row
-    tbody.selectAll(".groupStatRow").selectAll("td:not(.rowHeader)")
-      .text("-");
+    // new strategy for zero-length site selection
+    d3.select(".table-zn").html("");
+    generateTable(sites);
   }
 }
 
@@ -287,11 +315,11 @@ function calculateDistanceData(sites){
       var mmcountfull = 0;
       var mmcountvaccine = 0;
       var mmcountplacebo = 0;
-      for(var patient in seqID_lookup){
-        if(seqID_lookup[patient].mismatch != undefined){
-          var is_mismatch = seqID_lookup[patient].mismatch[d];
+      for(var participant in seqID_lookup){
+        if(seqID_lookup[participant].mismatch != undefined){
+          var is_mismatch = seqID_lookup[participant].mismatch[d];
           mmcountfull +=is_mismatch;
-          if(seqID_lookup[patient].vaccine){
+          if(seqID_lookup[participant].vaccine){
             mmcountvaccine += is_mismatch;
           } else {
             mmcountplacebo += is_mismatch;
@@ -351,11 +379,12 @@ function whichIsBigger(a,b){
 }
   
 
-	function removeOnClick(d, i) {
-    var site = selected_sites[i];
-		selected_sites.splice(i, 1);
+	function removeOnClick(d) {
+    var site = refmap[d["Site (HXB2)"]];
+    var idx = selected_sites.indexOf(site);
+		selected_sites.splice(idx, 1);
     var bar = d3.select("#sitebar" + site);
-    var yval = overview_yscale(i);
+    var yval = overview_yscale(idx);
 			bar.classed("selected",false)
 				.attr('opacity', 0.5)
 				.attr("y", yval )
@@ -370,8 +399,8 @@ function toggleTableDisplay(){
   generateTable(selected_sites);
 }
 
-function onClickChangeView(d,i){
-  var site = selected_sites[i];
+function onClickChangeView(d){
+  var site = refmap[d["Site (HXB2)"]];
   // 37 is (arbitrary) magic number for a pretty zoom extent
   var s = 37;
   // the location of the translation is off
