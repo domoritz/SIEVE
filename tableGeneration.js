@@ -2,7 +2,6 @@ var colnames = ['Site (HXB2)','Vaccine','Placebo','Combined'];
 var sortType = [1,1,1,1];
 
 var showEntropies = true;
-d3.select("#tableToggleText").on("click",toggleTableDisplay);
 
 function generateTable(sites){
  d3.select(".table-zn table").remove();
@@ -21,7 +20,10 @@ function generateEntropyTable(sites) {
       .append("table")
       .attr("id","entropyTable")
       .style("width","100%");
-  table.append("caption").text("Entropy Summary");
+  var caption = table.append("caption");
+  caption.html("<span class='tableHeader'>Entropy Summary</span><br>" + 
+  "<span id='tableToggleText'>change table type</span>");
+  d3.select("#tableToggleText").on("click",toggleTableDisplay);
       
   var thead = table.append("thead");
   var tbody = table.append("tbody");
@@ -160,7 +162,7 @@ function updateEnropyTable(sites) {
 function calculateEntropyData(sites){
     return sites.map(function(d) {
       var result = {};
-      result[colnames[0]] = envmap[d].hxb2Pos;
+      result[colnames[0]] = display_idx_map[d];
       result[colnames[1]] = entropies.vaccine[d];
       result[colnames[2]] = entropies.placebo[d];
       result[colnames[3]] = entropies.full[d];
@@ -189,7 +191,10 @@ function generateDistanceTable(sites) {
       .append("table")
       .attr("id","distanceTable")
       .style("width","100%");
-  table.append("caption").text("Distance Summary");
+  var caption = table.append("caption");
+  caption.html("<span class='tableHeader'>Distance Summary</span><br>" + 
+  "<span id='tableToggleText'>change table type</span>");
+  d3.select("#tableToggleText").on("click",toggleTableDisplay);
       
   var thead = table.append("thead");
   var tbody = table.append("tbody");
@@ -309,30 +314,36 @@ function updateDistanceTable(sites) {
 }
 
 function calculateDistanceData(sites){
-    return sites.map(function(d) {
+  
+  
+  return sites.map(function(d) {
       
-      // obtaining mismatch counts
-      var mmcountfull = 0;
-      var mmcountvaccine = 0;
-      var mmcountplacebo = 0;
-      for(var participant in seqID_lookup){
-        if(seqID_lookup[participant].mismatch != undefined){
-          var is_mismatch = seqID_lookup[participant].mismatch[d];
-          mmcountfull +=is_mismatch;
-          if(seqID_lookup[participant].vaccine){
-            mmcountvaccine += is_mismatch;
+      // obtaining distance totals
+      var distTotFull = 0;
+      var distTotVac = 0;
+      var distTotPlac = 0;
+      var participantDistances;
+      for (var i = 0; i < dists.length; i++){
+        if (dists[i].key === dist_metric){ participantDistances = dists[i].values; break;}
+      }
+      for(var participantIdx = 0; participantIdx < participantDistances.length; participantIdx++){
+        if (seqID_lookup[participantDistances[participantIdx].key] !== undefined){
+          var distance = +participantDistances[participantIdx].values[d];
+          distTotFull += distance;
+          if(seqID_lookup[participantDistances[participantIdx].key].vaccine){
+            distTotVac += distance;
           } else {
-            mmcountplacebo += is_mismatch;
+            distTotPlac += distance;
           }
         }
       }
       
-      // writing mismatch data
+      // writing distance data
       var result = {};
-      result[colnames[0]] = envmap[d].hxb2Pos;
-      result[colnames[1]] = mmcountvaccine;
-      result[colnames[2]] = mmcountplacebo;
-      result[colnames[3]] = mmcountfull;
+      result[colnames[0]] = display_idx_map[d];
+      result[colnames[1]] = distTotVac;
+      result[colnames[2]] = distTotPlac;
+      result[colnames[3]] = distTotFull;
       return result;
   });
 }

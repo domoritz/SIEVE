@@ -7,10 +7,6 @@ var barmargin = {top: 5, right: 10, bottom: 0, left: 10},
 var barchartmargin = {top: 15, right: 80, bottom: 10, left: 20},
 	barchartwidth = 280,
 	barchartheight = 70;
-	
-// The below will be read from file at some point
-var studyname = "RV144",
-	protein = "env";
 
 var margin =  {top: 20, right: 50, bottom: 50, left: 50};
 var width = 800 - margin.left - margin.right;
@@ -20,33 +16,17 @@ var plac_scale = d3.scale.linear()
 	.range([0, barwidth]);
 var vac_scale = d3.scale.linear()
 	.range([0, barwidth]);
-var pval_scale = d3.scale.log()
-	.domain([.1, 1.1])
-	.range([0, .95*height]);
-var tval_scale = d3.scale.linear()
-	.domain([-1,0]) // will compute domain when scale is selected the first time
-	.range([.95*height, 0]);
-var entropy_scale = d3.scale.linear()
-	.range([.95*height, 0])
-	.domain([-1, 0]); //will compute domain when scale is selected the first time.
 var opacity_scale = d3.scale.linear()
 	.domain([-1,0]) // will compute domain when navigation area is used the first time.
 	.range([0.5,0])
 	.clamp(true);
-
-function getParameterByName(name) {
-    name = name.replace(/[\[]/, "\\[").replace(/[\]]/, "\\]");
-    var regex = new RegExp("[\\?&]" + name + "=([^&#]*)"),
-        results = regex.exec(location.search);
-    return results === null ? "" : decodeURIComponent(results[1].replace(/\+/g, " "));
-}
 
 var selected_sites = [];
 
 var mouse_down = false;
 var shift_down = false;
 var last_updated;
-var yscale_mode = 0; //0 = pval, 1 = entropy, 2 = tstat, -1 = constant
+var yscale_mode;
 
 var pval_scale_ticks = [0.01 + 0.1, 0.05 + 0.1, 0.2 + 0.1, 1 + 0.1];
 function tval_scale_ticks(tval_scale_domain){
@@ -60,7 +40,7 @@ function entropy_scale_ticks(entropy_scale_domain){
 	ticks.push(entropy_scale_domain[1]);
 	return ticks;
 }
-var selaxistitle = "p-value";
+
 
 // clear selecting mode even if you release your mouse elsewhere.
 d3.select(window).on("mouseup", function(){ last_updated = undefined; mouse_down = false; })
@@ -77,17 +57,7 @@ function overview_yscale(site)
 	/*	returns the y of a site bar based on the currently selected
 		scale
 	*/
-	switch (yscale_mode)
-	{
-	case 0:
-		return pval_scale(pvalues[site]+.1);
-	case 1:
-		return entropy_scale(entropies.full[site]);
-	case 2:
-		return tval_scale(tvalues[site]);
-	default:
-		return 0;
-	}
+	return statScales[dist_metric][yscale_mode](siteStats[dist_metric][yscale_mode][site]);
 }
 		
 /** Generate visualization */
@@ -120,10 +90,11 @@ function generateSiteSelector() {
 		how often the script attempts to process the selected sites when making
 		a sweep over the site selection chart.	*/
   
-	d3.select(".analysisID").append("h2").text(
-	  studyname + ": " + protein + " (" + vaccine.ID.trim() + ")");
-	d3.select(".analysisID").append("button")
-		.attr("id","get-link-to-analysis")
+	d3.select(".analysisID").html(
+		"<h2><span id='analysisID-studyname'>" + studyname +
+		"</span>: <span id='analysisID-protein'>" + protein +
+		"</span> (<span id='analysisID-immunogen'>" + immunogen + "</span>)</h2>");
+	d3.select("#shareAnalysisButton")
 		.on("click", function(){
 			// get URL and chop off currently added sites, if any
 			var currURL = document.URL;
@@ -131,12 +102,17 @@ function generateSiteSelector() {
 			// get HXB2 (or other ref) for sites being appended to URL
 			var sitesInURL = [];
 			selected_sites.forEach(function(d){
-				sitesInURL.push(envmap[d].hxb2Pos);
+				sitesInURL.push(display_idx_map[d]);
 			});
 			// assemble the shareable URL and pass to copyToClipboard function
-			var shareableURL = currURL + "?sites=" + sitesInURL.toString();
-			copyToClipboard(shareableURL);})
-		.text("Get link to share this analysis");
+			var shareableURL = currURL + "?sites=" + sitesInURL.toString() + 
+								"&study=" + studyname + "&protein=" + protein + "&immunogen=" + immunogen + "&dist=" + dist_metric;
+			copyToClipboard(shareableURL);
+		});
+	d3.select("#startSiteTour")
+		.on("click", function(){
+			startIntro();
+		});
   
   window.xScale = d3.scale.linear()
     .domain([0, vaccine.sequence.length-1])
@@ -144,19 +120,8 @@ function generateSiteSelector() {
 	
 	window.xAxis = d3.svg.axis()
 			.scale(xScale)
-      .tickFormat(function(d,i){return envmap[d].hxb2Pos})
+      .tickFormat(function(d,i){return display_idx_map[d]})
 			.orient("bottom");
-			
-	window.yAxisl = d3.svg.axis()
-		.scale(pval_scale)
-		.tickValues(pval_scale_ticks)
-		.tickFormat(function(d) {return Math.round((d - 0.1)*100)/100;})
-		.orient("left");
-	window.yAxisr = d3.svg.axis()
-		.scale(pval_scale)
-		.tickValues(pval_scale_ticks)
-		.tickFormat(function(d) {return Math.round((d - 0.1)*100)/100;})
-		.orient("right");
 			
 	window.sitebarwidth = xScale.range()[1] / d3.max(xScale.domain());
 			// = totalwidth/numbars
@@ -269,17 +234,17 @@ function generateSiteSelector() {
 	siteselSVGg.append("g")
 		.attr("class", "y axis l")
 		.attr("transform", "translate(-5,0)")
-		.call(yAxisl);
+		.call(statAxes[dist_metric][yscale_mode].left);
 	siteselSVGg.append("text")
 		.attr("class", "y axis label")
 		.attr("text-anchor", "beginning")
 		.attr("x", -margin.right)
 		.attr("y", -margin.top/2)
-		.text(selaxistitle);
+		.text(yscale_mode);
 	siteselSVGg.append("g")
 		.attr("class", "y axis r")
 		.attr("transform", "translate(" + (width+5) + ",0)")
-		.call(yAxisr);
+		.call(statAxes[dist_metric][yscale_mode].right);
 	
 	function refresh() {
 		if (!shift_down) {			
@@ -316,7 +281,7 @@ function generateSiteSelector() {
 					var origLabelLocation = parseFloat(sitebars[0][i].getAttribute("x")) + origSiteBarWidth/2;
 					return (origLabelLocation + d3.event.translate[0]/d3.event.scale)*d3.event.scale;})
 				.attr("display", function(d,i){
-					if (d3.event.scale > 25 && parseFloat(sitebars[0][i].getAttribute("opacity")) > 0) {
+					if (d3.event.scale > 15 && parseFloat(sitebars[0][i].getAttribute("opacity")) > 0) {
 						return "default";
 					} else {
 						return "none";}});
@@ -340,18 +305,8 @@ function generateSiteSelector() {
 			.attr("y", -margin.top/2)
 			.attr("text-anchor", "end")
 			.text(function () {
-				if (yscale_mode === 0){ 
-					return "HXB2 Pos: " + envmap[i].hxb2Pos +
-						" // p-value: " + pvalues[i].toPrecision(2);
-				} else if (yscale_mode === 1) {
-					return "HXB2 Pos: " + envmap[i].hxb2Pos +
-						" // entropy: " + entropies.full[i];
-				} else if (yscale_mode === 2) {
-					return "HXB2 Pos: " + envmap[i].hxb2Pos +
-						" // t-stat: " + tvalues[i].toPrecision(2);
-				} else {
-					return "HXB2 Pos: " + envmap[i].hxb2Pos;
-				}
+				return "HXB2 Pos: " + display_idx_map[i] +
+						" // " + yscale_mode + ": " + siteStats[dist_metric][yscale_mode][i].toPrecision(2);
 			});
 		
 		if (!mouse_down || !shift_down) { return; }
@@ -472,46 +427,10 @@ function hxb2_selection()
 
 function yscale_selection()
 {
-	switch (d3.event.target.value)
-	{
-	case "pvalue":
-		yscale_mode = 0;
-		yAxisl.scale(pval_scale).tickValues(pval_scale_ticks)
-			.tickFormat(function(d) {return Math.round((d - 0.1)*100)/100;});
-		yAxisr.scale(pval_scale).tickValues(pval_scale_ticks)
-			.tickFormat(function(d) {return Math.round((d - 0.1)*100)/100;});
-		selaxistitle = "p-value";
-		break;
-	case "entropy":
-		yscale_mode = 1;
-		if (entropy_scale.domain()[0] == -1)
-		{ //first time selection
-			entropy_scale.domain([0, _.max(entropies.full)]);
-		}
-		
-		yAxisl.scale(entropy_scale).tickValues(entropy_scale_ticks(entropy_scale.domain()))
-			.tickFormat(function(d) {return Math.round(d*100)/100;});
-		yAxisr.scale(entropy_scale).tickValues(entropy_scale_ticks(entropy_scale.domain()))
-			.tickFormat(function(d) {return Math.round(d*100)/100;});
-		selaxistitle = "entropy";
-		break;
-	case "tvalue":
-		yscale_mode = 2;
-		if (tval_scale.domain()[0] == -1){
-			tval_scale.domain([0, Math.abs(d3.max([d3.min(tvalues),d3.max(tvalues)]))]);
-		}
-		yAxisl.scale(tval_scale).tickValues(tval_scale_ticks(tval_scale.domain()))
-			.tickFormat(function(d) {return Math.round((d)*100)/100;});
-		yAxisr.scale(tval_scale).tickValues(tval_scale_ticks(tval_scale.domain()))
-			.tickFormat(function(d) {return Math.round((d)*100)/100;});
-		selaxistitle = "t-stat";
-		break;
-	case "constant":
-		yscale_mode = -1;
-		yAxisl.scale(entropy_scale).tickValues(0);
-		yAxisr.scale(entropy_scale).tickValues(0);
-		selaxistitle = "";
-		break;
+	yscale_mode = d3.event.target.value;
+	var newYScale = statScales[dist_metric][yscale_mode];
+	if (newYScale.domain()[0] == -1){
+		newYScale.domain([d3.min(siteStats[dist_metric][yscale_mode]), d3.max(siteStats[dist_metric][yscale_mode])]);
 	}
 	
 	d3.selectAll(".sitebars")
@@ -520,7 +439,7 @@ function yscale_selection()
 		.attr("y", function(d, i) { return overview_yscale(i); })
 		.attr("height", function(d, i) {return height - overview_yscale(i);});
 		
-	siteselSVGg.select(".y.axis.l").transition().call(yAxisl);
-	siteselSVGg.select(".y.axis.r").transition().call(yAxisr);
-	d3.select(".y.axis.label").text(selaxistitle);
+	siteselSVGg.select(".y.axis.l").transition().call(statAxes[dist_metric][yscale_mode].left);
+	siteselSVGg.select(".y.axis.r").transition().call(statAxes[dist_metric][yscale_mode].right);
+	d3.select(".y.axis.label").text(yscale_mode);
 }
