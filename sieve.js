@@ -18,7 +18,7 @@ var vac_scale = d3.scale.linear()
 	.range([0, barwidth]);
 var opacity_scale = d3.scale.linear()
 	.domain([-1,0]) // will compute domain when navigation area is used the first time.
-	.range([0.5,0])
+	.range([0.3,0])
 	.clamp(true);
 
 var selected_sites = [];
@@ -68,12 +68,10 @@ function generateVis(){
 	
 	generateSiteSelector();
 	drawPyramid(selected_sites);
-  	generateTable(selected_sites);
+  	generateTables(selected_sites);
 	selected_sites.forEach(function(d) {
-		d3.select("#sitebar" + d).classed("selected",true)
-			.attr("opacity", 1)
-			.attr("y", -height/5)
-			.attr("height",height/5);
+		d3.select("#sitebar" + d).classed("selected",true);
+		d3.select("#selMarker" + d).classed("selected",true);
 	});
 	update_AAsites(selected_sites);
 }
@@ -171,8 +169,7 @@ function generateSiteSelector() {
 		.attr("fill", function (d) {
 			if (d == '-') return "#000000";
 			else return aacolor(d);
-		})
-		.attr("opacity", 0.5);
+		});
 		
 	window.siteAALabels = siteselSVGg.selectAll(".siteAAlabel").data(vaccine.sequence);
 	siteAALabels.enter().append("text")
@@ -183,6 +180,16 @@ function generateSiteSelector() {
 		.attr("text-anchor", "middle")
 		.attr("display", "none")
 		.text(function(d) { return "" + d; });
+	
+	window.siteSelMarkers = siteselSVGg.selectAll(".siteSelMarkers").data(vaccine.sequence);
+	siteSelMarkers.enter().append("rect")
+		.attr("class", "siteSelMarkers")
+		.attr("id", function (d,i) {return "selMarker" + i;})
+		.attr("x", function (d,i) { return xScale(i) - sitebarwidth/2; })
+		.attr("y", -height/5)
+		.attr("width", sitebarwidth)
+		.attr("height", height/15)
+		.attr("fill","steelblue");
 		
 	window.foregroundbars = siteselSVGg.selectAll(".foregroundbars")
 		.data(vaccine.sequence);
@@ -258,6 +265,7 @@ function generateSiteSelector() {
 			
 			sitebars.attr("transform", "translate(" + d3.event.translate[0] +", 0)scale(" + d3.event.scale + ", 1)");
 			foregroundbars.attr("transform", "translate(" + d3.event.translate[0] +", 0)scale(" + d3.event.scale + ", 1)");
+			siteSelMarkers.attr("transform", "translate(" + d3.event.translate[0] +", 0)scale(" + d3.event.scale + ", 1)");
 			siteselSVGg.select(".x.axis").call(xAxis.scale(xScale));
 			
 			/* Rectangles were being drawn outside chart region (into margins of chart).
@@ -271,9 +279,13 @@ function generateSiteSelector() {
 			// Change in viewing window of nav pane introduces new window span
 			opacity_scale.domain([visWindowSpan/2, visWindowSpan/2 + .01*visWindowSpan]);
 			// update opacity of sitebars based on drawing window
-			sitebars.attr("opacity", function(d,i){
+			sitebars.attr("display", function(d,i){
 				var site_x_loc = parseFloat(sitebars[0][i].getAttribute("x")) + origSiteBarWidth/2;
-				return opacity_scale(Math.abs(visWindowMidpt - site_x_loc));
+				if (opacity_scale(Math.abs(visWindowMidpt - site_x_loc)) > 0) {
+					return "default";
+				} else {
+					return "none";
+				}
 			});
 			// update position of text
 			siteAALabels
@@ -281,7 +293,7 @@ function generateSiteSelector() {
 					var origLabelLocation = parseFloat(sitebars[0][i].getAttribute("x")) + origSiteBarWidth/2;
 					return (origLabelLocation + d3.event.translate[0]/d3.event.scale)*d3.event.scale;})
 				.attr("display", function(d,i){
-					if (d3.event.scale > 15 && parseFloat(sitebars[0][i].getAttribute("opacity")) > 0) {
+					if (d3.event.scale > 15 && sitebars[0][i].getAttribute("display") != "none") {
 						return "default";
 					} else {
 						return "none";}});
@@ -325,16 +337,15 @@ function generateSiteSelector() {
 		
 		update_array.forEach(function(j) {
 		var bar = d3.select("#sitebar"+j);
+		var marker = d3.select("#selMarker"+j);
 		if (!bar.classed("selected")) { // if not selected
 		
 			// add to and sort array
 			selected_sites.splice(_.sortedIndex(selected_sites, j), 0, j);
 			
 			// up it and set selected to true
-			bar.classed("selected",true)
-				.attr("opacity", 1)
-				.attr("y", -height/5)
-				.attr("height", height/5);
+			bar.classed("selected",true);
+			marker.classed("selected",true);
 				
 		} else { // if already selected
 			// remove from array
@@ -342,10 +353,8 @@ function generateSiteSelector() {
 			selected_sites.splice(index, 1);
 			// reset formatting, set selected to false
 			var yval = overview_yscale(j);
-			bar.classed("selected",false)
-				.attr('opacity', 0.5)
-				.attr("y", function (d) { return yval;} )
-				.attr("height", function (d) {return height - yval;});
+			bar.classed("selected",false);
+			marker.classed("selected", false);
 		}
 		});
 		
@@ -356,7 +365,7 @@ function generateSiteSelector() {
 	{
 		update_AAsites(selected_sites);
 		updatePyramid(selected_sites);
-		updateTable(selected_sites);
+		updateTables(selected_sites);
 	}
 }
 
@@ -368,16 +377,15 @@ function clear_selection()
 	for (var i = 0; i < selected_sites.length; i++) {
 		var site = selected_sites[i];
     	var bar = d3.select("#sitebar" + site);
+		var marker = d3.select("#selMarker" + site);
     	var yval = overview_yscale(site);
-		bar.classed("selected",false)
-			.attr('opacity', 0.5)
-			.attr("y", yval )
-			.attr("height", height - yval);
+		marker.classed("selected",false);
+		bar.classed("selected",false);
 	}
 	selected_sites = [];	
 	update_AAsites([]);
 	updatePyramid([]);
-	updateTable([]);
+	updateTables([]);
 }
 
 function hxb2_selection()
@@ -411,17 +419,14 @@ function hxb2_selection()
 					return;
 				} else {
 					selected_sites.splice(index, 0, d);
-					
-					d3.select("#sitebar" + d).classed("selected",true)
-						.attr("opacity", 1)
-						.attr("y", -height/5)
-						.attr("height",height/5);
+					d3.select("#selMarker" + d).classed("selected",true);
+					d3.select("#sitebar" + d).classed("selected",true);
 				}
 			});
 		this.value = "";
 		update_AAsites(selected_sites);
 		updatePyramid(selected_sites);
-		updateTable(selected_sites);
+		updateTables(selected_sites);
 	}
 }
 

@@ -3,27 +3,71 @@ var sortType = [1,1,1,1];
 
 var showEntropies = true;
 
-function generateTable(sites){
- d3.select(".table-zn table").remove();
- if (showEntropies) { generateEntropyTable(sites); }
- else { generateDistanceTable(sites); }
- if (sites.length > 0) updateTable(selected_sites);
+function generateTables(sites){
+ d3.selectAll("#entropyTableDiv table").remove();
+ d3.selectAll("#distanceTableDiv table").remove();
+ generateEntropyTable(sites);
+ sorttable.makeSortable(d3.select("#entropyTable")[0][0]);
+ generateDistanceTable(sites);
+ sorttable.makeSortable(d3.select("#distanceTable")[0][0]);
+ if (sites.length > 0) updateTables(selected_sites);
 }
 
-function updateTable(sites){
-  if (showEntropies) { updateEnropyTable(sites); }
-  else { updateDistanceTable(sites); }
+function updateTables(sites){
+  updateEnropyTable(sites);
+  updateDistanceTable(sites);
 }
 
 function generateEntropyTable(sites) {
-  var table = d3.select(".table-zn")
+  var summtable = d3.select("#entropyTableDiv")
+      .append("table")
+      .attr("id","entropySummTable")
+      .attr("class","table")
+      .style("width","100%");
+  var summthead = summtable.append("thead");
+  var summtbody = summtable.append("tbody");
+  // create table header
+  summthead.append("tr")
+    .selectAll("th")
+    .data(colnames)
+    .enter()
+    .append("th")
+      .attr("id", function (d,i) {return "summEntropyHeader" + i;})
+      .text(function(column,i) {
+        if (i===0) {return "Summary";}
+        else {return column;}
+      });
+  // create average and joint rows.
+  // text in data cells is empty, because there is no selection during table generation
+  var summavgRow = summtbody.append("tr").attr("class", "entropy averageRow groupStatRow");
+  var summjtRow = summtbody.append("tr").attr("class", "entropy jointRow groupStatRow");
+  summavgRow.append("td").attr("class", "rowHeader").text("Average");
+  summjtRow.append("td").attr("class", "rowHeader").text("Joint");
+  var numCellsToMake = d3.range(3);
+  summavgRow.selectAll("td:not(.rowHeader)").data(numCellsToMake).enter()
+    .append("td")
+      .attr("class", "entropy")
+      .attr("id", function (d){
+        if (d === 0) return "vaccineAverage";
+        else if (d === 1) return "placeboAverage";
+        else return "combinedAverage";
+      })
+      .text("-");
+  summjtRow.selectAll("td:not(.rowHeader)").data(numCellsToMake).enter()
+    .append("td")
+      .attr("class", "entropy")
+      .attr("id", function (d){
+        if (d === 0) return "vaccineJoint";
+        else if (d === 1) return "placeboJoint";
+        else return "combinedJoint";
+      })
+      .text("-");
+  
+  var table = d3.select("#entropyTableDiv")
       .append("table")
       .attr("id","entropyTable")
+      .attr("class","table sortable")
       .style("width","100%");
-  var caption = table.append("caption");
-  caption.html("<span class='tableHeader'>Entropy Summary</span><br>" + 
-  "<span id='tableToggleText'>change table type</span>");
-  d3.select("#tableToggleText").on("click",toggleTableDisplay);
       
   var thead = table.append("thead");
   var tbody = table.append("tbody");
@@ -35,41 +79,7 @@ function generateEntropyTable(sites) {
     .append("th")
       .attr("id", function (d,i) {return "entropyHeader" + i;})
       .style("cursor","pointer")
-      .on("click", function(k,i){
-        var currSortType = sortType[i];
-        sortType[i] *= -1;
-        var rowsToSort = tbody.selectAll("tr.siteRow");
-        rowsToSort.sort(function(a,b) {
-          if (currSortType > 0) {return whichIsBigger(a[k],b[k]);}
-          else{ return -whichIsBigger(a[k],b[k]);}
-        })
-      })
-      .text(function(column) { return column + " ↕"; });
-  // create average and joint rows.
-  // text in data cells is empty, because there is no selection during table generation
-  var avgRow = tbody.append("tr").attr("class", "entropy averageRow groupStatRow");
-  var jtRow = tbody.append("tr").attr("class", "entropy jointRow groupStatRow");
-  avgRow.append("td").attr("class", "rowHeader").text("Average");
-  jtRow.append("td").attr("class", "rowHeader").text("Joint");
-  var numCellsToMake = d3.range(3);
-  avgRow.selectAll("td:not(.rowHeader)").data(numCellsToMake).enter()
-    .append("td")
-      .attr("class", "entropy")
-      .attr("id", function (d){
-        if (d === 0) return "vaccineAverage";
-        else if (d === 1) return "placeboAverage";
-        else return "combinedAverage";
-      })
-      .text("-");
-  jtRow.selectAll("td:not(.rowHeader)").data(numCellsToMake).enter()
-    .append("td")
-      .attr("class", "entropy")
-      .attr("id", function (d){
-        if (d === 0) return "vaccineJoint";
-        else if (d === 1) return "placeboJoint";
-        else return "combinedJoint";
-      })
-      .text("-");
+      .text(function(column) { return column;});
       
   // holder for table rows while selection emtpy
   tbody.append("tr").attr("class","entropyTempRow")
@@ -126,6 +136,10 @@ function updateEnropyTable(sites) {
       })
       .enter()
       .append("td")
+        .attr("sorttable_customkey",function(d,i){
+          if (i === 0) { return refmap[d];}
+          else {return +d;}
+        })
         .text(function(d){
           return d;
         });
@@ -147,15 +161,9 @@ function updateEnropyTable(sites) {
     d3.select("#placeboJoint").text(jointEntropyData[1]);
     d3.select("#combinedJoint").text(jointEntropyData[2]);
     
-    // sort rows by site
-    tbody.selectAll("tr.siteRow").sort(function(a,b) {
-      return whichIsBigger(a[colnames[0]], b[colnames[0]]);
-    });
-    
   } else {
     // new strategy for zero-length site selection
-    d3.select(".table-zn").html("");
-    generateTable(sites);
+    generateTables(sites);
   }
 }
 
@@ -187,14 +195,42 @@ function calculateJointEntropyData(sites){
 }
 
 function generateDistanceTable(sites) {
-  var table = d3.select(".table-zn")
+  var summtable = d3.select("#distanceTableDiv")
+      .append("table")
+      .attr("id","distanceSummTable")
+      .attr("class","table sortable")
+      .style("width","100%");
+  var summthead = summtable.append("thead");
+  var summtbody = summtable.append("tbody");
+  // create table header
+  summthead.append("tr")
+    .selectAll("th")
+    .data(colnames)
+    .enter()
+    .append("th")
+      .attr("id", function (d,i) {return "summdistanceHeader" + i;})
+      .text(function(column,i) {
+        if (i===0) {return "Summary";}
+        else {return column;}
+      });
+  var summavgRow = summtbody.append("tr").attr("class", "distance averageRow groupStatRow");
+  summavgRow.append("td").attr("class", "rowHeader").text("Average");
+  var numCellsToMake = d3.range(3);
+  summavgRow.selectAll("td:not(.rowHeader)").data(numCellsToMake).enter()
+    .append("td")
+      .attr("class", "distance")
+      .attr("id", function (d){
+        if (d === 0) return "vaccineAverage";
+        else if (d === 1) return "placeboAverage";
+        else return "combinedAverage";
+      })
+      .text("-");
+  
+  var table = d3.select("#distanceTableDiv")
       .append("table")
       .attr("id","distanceTable")
+      .attr("class","table sortable")
       .style("width","100%");
-  var caption = table.append("caption");
-  caption.html("<span class='tableHeader'>Distance Summary</span><br>" + 
-  "<span id='tableToggleText'>change table type</span>");
-  d3.select("#tableToggleText").on("click",toggleTableDisplay);
       
   var thead = table.append("thead");
   var tbody = table.append("tbody");
@@ -206,30 +242,7 @@ function generateDistanceTable(sites) {
     .append("th")
       .attr("id", function (d,i) {return "distanceHeader" + i;})
       .style("cursor","pointer")
-      .on("click", function(k,i){
-        var currSortType = sortType[i];
-        sortType[i] *= -1;
-        var rowsToSort = tbody.selectAll("tr.siteRow");
-        rowsToSort.sort(function(a,b) {
-          if (currSortType > 0) {return whichIsBigger(a[k],b[k]);}
-          else{ return -whichIsBigger(a[k],b[k]);}
-        })
-      })
-      .text(function(column) { return column + " ↕"; });
-  // create average and joint rows
-  // text in data cells is empty, because there is no selection during table generation
-  var avgRow = tbody.append("tr").attr("class", "distance averageRow groupStatRow");
-  avgRow.append("td").attr("class", "rowHeader").text("Average");
-  var numCellsToMake = d3.range(3);
-  avgRow.selectAll("td:not(.rowHeader)").data(numCellsToMake).enter()
-    .append("td")
-      .attr("class", "distance")
-      .attr("id", function (d){
-        if (d === 0) return "vaccineAverage";
-        else if (d === 1) return "placeboAverage";
-        else return "combinedAverage";
-      })
-      .text("-");
+      .text(function(column) { return column; });
       
   // holder for table rows while selection emtpy
   tbody.append("tr").attr("class","distanceTempRow")
@@ -285,6 +298,10 @@ function updateDistanceTable(sites) {
       })
       .enter()
       .append("td")
+        .attr("sorttable_customkey",function(d,i){
+          if (i === 0) { return refmap[d];}
+          else {return +d;}
+        })
         .text(function(d){
           return d;
         });
@@ -300,16 +317,10 @@ function updateDistanceTable(sites) {
     d3.select(".distance#vaccineAverage").text(avgDistanceData[0]);
     d3.select(".distance#placeboAverage").text(avgDistanceData[1]);
     d3.select(".distance#combinedAverage").text(avgDistanceData[2]);
-       
-    // sort rows by site
-    tbody.selectAll("tr.siteRow").sort(function(a,b) {
-      return whichIsBigger(a[colnames[0]],b[colnames[0]])
-    });
     
   } else {
     // new strategy for zero-length site selection
-    d3.select(".table-zn").html("");
-    generateTable(sites);
+    generateTables(sites);
   }
 }
 
@@ -395,19 +406,18 @@ function whichIsBigger(a,b){
     var idx = selected_sites.indexOf(site);
 		selected_sites.splice(idx, 1);
     var bar = d3.select("#sitebar" + site);
+    var marker = d3.select("#selMarker" + site);
     var yval = overview_yscale(idx);
-			bar.classed("selected",false)
-				.attr('opacity', 0.5)
-				.attr("y", yval )
-				.attr("height", height - yval);
+		bar.classed("selected",false);
+    marker.classed("selected",false);
     update_AAsites(selected_sites);
 		updatePyramid(selected_sites);
-    updateTable(selected_sites);
+    updateTables(selected_sites);
 	}
 
 function toggleTableDisplay(){
   showEntropies = !showEntropies;
-  generateTable(selected_sites);
+  generateTables(selected_sites);
 }
 
 function onClickChangeView(d){
